@@ -38,58 +38,117 @@ int BMP::__inputfromfile(string path){
     if (!bmpfile)
         return 1; //not existed file
 
-    unsigned char *data = new unsigned char[14];
 
-    if (fread( data, 1, 14, bmpfile) != 14)
-        return 2; //error while reading file header
+    if (fread(&bfh.bft1, 1, 1, bmpfile) != 1 ||
+            fread(&bfh.bft2, 1, 1, bmpfile) != 1||
+            fread(&bfh.bfSize, 4, 1, bmpfile) != 1 ||
+            fread(&bfh.bfReserved1, 2, 1, bmpfile) != 1 ||
+            fread(&bfh.bfReserved2, 2, 1, bmpfile) != 1 ||
+            fread(&bfh.bfOffBits, 4, 1, bmpfile) != 1)
+        return 2;
 
-    bfh = {data[0], data[1], lechar32(&data[2]), lechar16(&data[6]), lechar16(&data[8]), 54};
+    if (fread(&bih.biSize, 4, 1, bmpfile) != 1 ||
+            fread(&bih.biWidth, 4, 1, bmpfile) != 1||
+            fread(&bih.biHeight, 4, 1, bmpfile) != 1||
+            fread(&bih.biPlanes, 2, 1, bmpfile) != 1||
+            fread(&bih.biBitCount, 2, 1, bmpfile) != 1||
+            fread(&bih.biCompression, 4, 1, bmpfile) != 1||
+            fread(&bih.biSizeImage, 4, 1, bmpfile) != 1||
+            fread(&bih.biXPelsPerMeter, 4, 1, bmpfile) != 1||
+            fread(&bih.biYPelsPerMeter, 4, 1, bmpfile) != 1||
+            fread(&bih.biClrUsed, 4, 1, bmpfile) != 1||
+            fread(&bih.biClrImportant, 4, 1, bmpfile) != 1)
+        return 3;
+    if (bih.biSize - 40 > 0){
+        unsigned char *data = new unsigned char[bih.biSize - 40];
+        fread(data, 1, bih.biSize - 40, bmpfile);
+        delete [] data;
+    }
 
+//    if (fread( data, 1, 4, bmpfile) != 4)
+//        return 3;//error while reading info header length
 
-    if (fread( data, 1, 4, bmpfile) != 4)
-        return 3;//error while reading info header length
+//    char32_t n = lechar32(data);
 
-    char32_t n = lechar32(data);
-
-    delete [] data;
+//    delete [] data;
 
     if (bih.biCompression != 0){
         return 10;//compression!!!
     }
 
 
-    data = new unsigned char[n];
+//    data = new unsigned char[n];
 
-    if (fread(&data[4], 1, n - 4, bmpfile) != n - 4)
-        return 3;//error while reading info header
+//    if (fread(&data[4], 1, n - 4, bmpfile) != n - 4)
+//        return 3;//error while reading info header
 
-    bih = {40, lechar32(&data[4]), lechar32(&data[8]), lechar16(&data[12]), lechar16(&data[14]), lechar32(&data[16]), lechar32(&data[20]), lechar32(&data[24]), lechar32(&data[28]), lechar32(&data[32]), lechar32(&data[36])};
+//    bih = {40, lechar32(&data[4]), lechar32(&data[8]), lechar16(&data[12]), lechar16(&data[14]), lechar32(&data[16]), lechar32(&data[20]), lechar32(&data[24]), lechar32(&data[28]), lechar32(&data[32]), lechar32(&data[36])};
 
-    bfh.bfSize -= n - 40;
-
-    delete [] data;
+//    bfh.bfSize -= n - 40;
 
 
-    if (bih.biClrUsed != 0){
-        palette = new RGB[bih.biClrUsed];
-        for (int i = 0; i < int(bih.biClrUsed); ++i){
+
+    if (bih.biBitCount <= 8){
+        int count = (bih.biClrUsed?int(bih.biClrUsed):int(pow(2, bih.biBitCount)));
+        palette = new RGB[count];
+        for (int i = 0; i < count; ++i){
             if (fread(&palette[i], 1, 4, bmpfile) != 4)
                 return 5;// error while reading palette
         }
     }
 
-    if (bih.biBitCount == 4){
+    if (bih.biBitCount == 1){
         imagep = new unsigned char*[bih.biHeight];
-        for (int i = 0; i < int(bih.biHeight); ++i)
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
             imagep[i] = new unsigned char[bih.biWidth];
         unsigned char c;
-        for (int i = 0; i < int(bih.biHeight); ++i)
-            for (int j = 0; j < (int(bih.biWidth)%2 == 0 ? int(bih.biWidth)/2 : int(bih.biWidth)/2 + 1); ++j){
+        for (unsigned int i = 0; i < bih.biHeight; ++i){
+            unsigned int j = 0;
+            for (; j < (!bool(bih.biWidth%8) ? bih.biWidth/8 : bih.biWidth/8 + 1); ++j){
                 if (fread(&c, 1, 1, bmpfile) != 1)
                         return 6;//error while reading image
-                imagep[i][2*j] = c&240/16*17;
-                if (2*j + 1 < int(bih.biWidth))
-                    imagep[i][2*j + 1] = c&15*17;
+                for (unsigned int k = 0; k < 8 && char32_t(j)*8 + k < bih.biWidth; ++k)
+                    imagep[i][j*8 + k] = c&pow(2, uint(7 - k));
+            }
+            --j;
+            if (j%4 != 0){
+                unsigned char e[3];
+                fread(&e, 1, 4 - (j - 1)%4 - 1, bmpfile);
+            }
+        }
+    }
+    if (bih.biBitCount == 2){
+        imagep = new unsigned char*[bih.biHeight];
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            imagep[i] = new unsigned char[bih.biWidth];
+        unsigned char c;
+        for (unsigned int i = 0; i < bih.biHeight; ++i){
+            unsigned int j = 0;
+            for (; j < (!bool(bih.biWidth%4) ? bih.biWidth/4 : bih.biWidth/4 + 1); ++j){
+                if (fread(&c, 1, 1, bmpfile) != 1)
+                        return 6;//error while reading image
+                for (unsigned int k = 0; k < 4 && char32_t(j)*4 + k < bih.biWidth; ++k)
+                    imagep[i][j*4 + k] = c&(pow(2, uint(7 - k*2)) + pow(2, uint(7 - k*2 - 1)));
+            }
+            --j;
+            if (j%4 != 0){
+                unsigned char e[3];
+                fread(&e, 1, 4 - (j - 1)%4 - 1, bmpfile);
+            }
+        }
+    }
+    if (bih.biBitCount == 4){
+        imagep = new unsigned char*[bih.biHeight];
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            imagep[i] = new unsigned char[bih.biWidth];
+        unsigned char c;
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            for (unsigned int j = 0; j < (!bool(bih.biWidth%2) ? bih.biWidth/2 : bih.biWidth/2 + 1); ++j){
+                if (fread(&c, 1, 1, bmpfile) != 1)
+                        return 6;//error while reading image
+                imagep[i][2*j] = c&240/16;
+                if (2*j + 1 < bih.biWidth)
+                    imagep[i][2*j + 1] = c&15;
             }
     }
     if (bih.biBitCount == 8){
@@ -117,9 +176,9 @@ int BMP::__inputfromfile(string path){
             for (int j = 0; j < int(bih.biWidth); ++j){
                 if (fread(&c, 1, 2, bmpfile) != 2)
                     return 6;//error while reading image
-                imagergb[i][j].blue = u_char(int(trunc(double(c[1]&31)/31*255)));
-                imagergb[i][j].green = u_char(int(trunc(double((c[1]&224)/32 + (c[0]&3)*8)/31*255)));
-                imagergb[i][j].red = u_char(int(trunc(double(c[0]&124/8)/31*255)));
+                imagergb[i][j].blue = u_char(c[1]&31);
+                imagergb[i][j].green = u_char((c[1]&224)/32 + (c[0]&3)*8);
+                imagergb[i][j].red = u_char(c[0]&124/8);
                 imagergb[i][j].reserved = 255;
             }
             if (bih.biWidth%4 != 0)
@@ -245,19 +304,47 @@ int BMP::outpputininfile(string path){
                     fwrite(&d, 1, 4 - (bih.biWidth - 1)%4 - 1, bmpfile);
                 }
             }
-        else {
-            if (bih.biBitCount == 4)
-                for (int i = 0; i < int(bih.biHeight); ++i){
-                    for (int j = 0; j < int(bih.biWidth)/2 + int(bih.biWidth)%2; ++j){
-                        unsigned char od;
-                        od = imagep[i][2*j]*16 + (2*j+1<int(bih.biWidth)? imagep[i][2*j + 1] :0);
-                        fwrite(&od, 1, 1, bmpfile);
-                    }
-                    unsigned char d [3] = {0, 0, 0};
-                    if ((int(bih.biWidth)/2 + int(bih.biWidth)%2)%4 != 0){
-                        fwrite(&d, 1, 4 - (int(bih.biWidth)/2 + int(bih.biWidth)%2 - 1)%4 - 1, bmpfile);
-                    }
+        if (bih.biBitCount == 4)
+            for (unsigned int i = 0; i < bih.biHeight; ++i){
+                for (unsigned int j = 0; j < bih.biWidth/2 + bih.biWidth%2; ++j){
+                    unsigned char od;
+                    od = imagep[i][2*j]*16 + (2*j+1<bih.biWidth? imagep[i][2*j + 1] :0);
+                    fwrite(&od, 1, 1, bmpfile);
                 }
+                unsigned char d [3] = {0, 0, 0};
+                if ((int(bih.biWidth)/2 + int(bih.biWidth)%2)%4 != 0){
+                    fwrite(&d, 1, 4 - (int(bih.biWidth)/2 + int(bih.biWidth)%2 - 1)%4 - 1, bmpfile);
+                }
+            }
+        if (bih.biBitCount == 2){
+            for (unsigned int i = 0; i < bih.biHeight; ++i){
+                unsigned int j = 0;
+                for (; j < bih.biWidth/4 + uint(bih.biWidth%4>0); ++j){
+                    unsigned char out = 0;
+                    for (unsigned int k = 0; k < 4 && j*4 + k < bih.biWidth; ++k)
+                        out += imagep[i][j*4 + k] * pow(2, 6 - k*2);
+                    fwrite(&out, 1, 1, bmpfile);
+                }
+                unsigned char d [3] = {0, 0, 0};
+                --j;
+                if (j%4 > 0)
+                    fwrite(&d, 1, 4 - (j - 1)%4 - 1, bmpfile);
+            }
+        }
+        if (bih.biBitCount == 1){
+            for (unsigned int i = 0; i < bih.biHeight; ++i){
+                unsigned int j = 0;
+                for (; j < bih.biWidth/8 + uint(bih.biWidth%8>0); ++j){
+                    unsigned char out = 0;
+                    for (unsigned int k = 0; k < 8 && j*8 + k < bih.biWidth; ++k)
+                        out += imagep[i][j*8 + k] * pow(2, 7 - k);
+                    fwrite(&out, 1, 1, bmpfile);
+                }
+                unsigned char d [3] = {0, 0, 0};
+                --j;
+                if (j%4 > 0)
+                    fwrite(&d, 1, 4 - (j - 1)%4 - 1, bmpfile);
+            }
         }
     }
     if (imagergb != nullptr){
@@ -334,11 +421,7 @@ int BMP::writeimage(RGB **image, unsigned int height, unsigned int width, unsign
 
 int BMP::writeimage(unsigned char **image, unsigned int height, unsigned int width, RGB * palette, unsigned int pallen, unsigned int bitpercolor){
     empty = false;
-    bfh.bfSize = char32_t(54 + pallen*4 + (uint(width*(double(bitpercolor)/8)) + 4 - (uint(width*(double(bitpercolor)/8)) - 1)%4 - 1)*height);
-    bih.biWidth = char32_t(width);
-    bih.biHeight = char32_t(height);
-    bih.biBitCount = char16_t(bitpercolor);
-    bih.biClrUsed = pallen;
+
 
     if (pallen > 0)
         this->palette = new RGB[pallen];
@@ -357,6 +440,12 @@ int BMP::writeimage(unsigned char **image, unsigned int height, unsigned int wid
         delete [] imagep;
         imagep = nullptr;
     }
+
+    bfh.bfSize = char32_t(54 + pallen*4 + (uint(width*(double(bitpercolor)/8)) + 4 - (uint(width*(double(bitpercolor)/8)) - 1)%4 - 1)*height);
+    bih.biWidth = char32_t(width);
+    bih.biHeight = char32_t(height);
+    bih.biBitCount = char16_t(bitpercolor);
+    bih.biClrUsed = pallen;
 
     imagep = new unsigned char*[height];
     for (unsigned int i = 0; i < height; ++i)
@@ -438,14 +527,17 @@ int BMP::downsampling(unsigned int n){
     if (imagep != nullptr){
 
         unsigned char** downimage = new unsigned char *[height];
-        for (unsigned int i = 0; i < height; ++i)
+        for (unsigned int i = 0; i < height; ++i){
             downimage[i] = new unsigned char[width];
+            for (unsigned int j = 0; j < width; ++j)
+                downimage[i][j] = 0;
+        }
 
         for (unsigned int i = 0; i < height; ++i)
             for (unsigned int j = 0; j < width; ++j)
                 for (unsigned  int k = 0; k < n; ++k)
                     for (unsigned int l = 0; l < n; ++l)
-                        downimage[i][j] += imagep[i+k][j+l]/(n*n);
+                        downimage[i][j] += imagep[i*n+k][j*n+l]/(n*n);
 
         writeimage(downimage, height, width, this->palette, bih.biClrUsed, bih.biBitCount);
     }
@@ -481,6 +573,7 @@ int BMP::downsampling(unsigned int n){
 int BMP::resizewithupanddown(unsigned int m, unsigned int n){
     if (upsampling(m))
         return 1;
+    outpputininfile("clip0.bmp");
     if (downsampling(n))
         return 2;
     return 0;
@@ -619,4 +712,67 @@ int BMP::monochrome(){
     imagergb = nullptr;
 
     return 0;
+}
+
+BMP& BMP::logicalfiltration() // return xor of files
+{
+    if (empty)
+        throw 404;
+
+    if (imagergb != nullptr && imagep != nullptr)
+        throw 1;
+
+    if (bih.biBitCount != 1)
+        throw 2;
+
+    if (imagep == nullptr)
+        throw 3;
+
+    unsigned char **newim = new unsigned char*[bih.biHeight];
+    for (unsigned int i = 0; i < bih.biHeight; ++i){
+        newim[i] = new unsigned char[bih.biWidth];
+        for (unsigned int j = 0; j < bih.biWidth; ++j)
+            newim[i][j] = 0;
+    }
+    for (long int i  = 1; i < bih.biHeight - 1; ++i)
+        for (long int j = 1; j < bih.biWidth - 1; ++i){
+            int c = 0;
+            for (int k = -1; k < 2; ++k)
+                for (int l = -1; l < 2; ++l)
+                    if (k != 0 && l != 0)
+                        c += imagep[i+k][j+l];
+
+            if (c == 8)
+                newim[i][j] = 1;
+            else
+            {
+                if (c == 0)
+                    newim[i][j] = 0;
+                else
+                    newim[i][j] = imagep[i][j];
+            }
+        }
+    for (unsigned int i = 0;  i < bih.biHeight; ++i){
+        newim[i][0] = imagep[i][0];
+        newim[i][bih.biHeight - 1] = imagep[i][bih.biHeight - 1];
+    }
+    for (unsigned int j = 1; j < bih.biWidth - 1; ++j){
+        newim[0][j] = imagep[0][j];
+        newim[bih.biWidth - 1][j] = imagep[bih.biWidth - 1][j];
+    }
+    BMP* xorimage = new BMP();
+
+    unsigned char ** xorarray = new unsigned char*[bih.biHeight];
+    for (unsigned int i = 0; i < bih.biHeight; ++i)
+        xorarray[i] = new unsigned char[bih.biWidth];
+
+    for (unsigned int i = 0; i < bih.biHeight; ++i)
+        for (unsigned int j = 0; j < bih.biWidth; ++j)
+            xorarray[i][j] = (imagep[i][j] + newim[i][j])%2;
+
+    xorimage->writeimage(xorarray, bih.biHeight, bih.biWidth, this->palette, 2, 1);
+
+    writeimage(newim, bih.biHeight, bih.biWidth, this->palette, 2, 1);
+
+    return *xorimage;
 }
