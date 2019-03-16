@@ -108,9 +108,8 @@ int BMP::__inputfromfile(string path){
                 if (fread(&c, 1, 1, bmpfile) != 1)
                         return 6;//error while reading image
                 for (unsigned int k = 0; k < 8 && char32_t(j)*8 + k < bih.biWidth; ++k)
-                    imagep[i][j*8 + k] = c&pow(2, uint(7 - k));
+                    imagep[i][j*8 + k] = (c&pow(2, uint32_t(7 - k)))/pow(2, uint32_t(7 - k));
             }
-            --j;
             if (j%4 != 0){
                 unsigned char e[3];
                 fread(&e, 1, 4 - (j - 1)%4 - 1, bmpfile);
@@ -128,9 +127,8 @@ int BMP::__inputfromfile(string path){
                 if (fread(&c, 1, 1, bmpfile) != 1)
                         return 6;//error while reading image
                 for (unsigned int k = 0; k < 4 && char32_t(j)*4 + k < bih.biWidth; ++k)
-                    imagep[i][j*4 + k] = c&(pow(2, uint(7 - k*2)) + pow(2, uint(7 - k*2 - 1)));
+                    imagep[i][j*4 + k] = (c&(pow(2, uint32_t(7 - k*2)) + pow(2, uint32_t(7 - k*2 - 1))))/pow(2, uint32_t(7 - k*2 - 1));
             }
-            --j;
             if (j%4 != 0){
                 unsigned char e[3];
                 fread(&e, 1, 4 - (j - 1)%4 - 1, bmpfile);
@@ -176,9 +174,9 @@ int BMP::__inputfromfile(string path){
             for (int j = 0; j < int(bih.biWidth); ++j){
                 if (fread(&c, 1, 2, bmpfile) != 2)
                     return 6;//error while reading image
-                imagergb[i][j].blue = u_char(c[1]&31);
-                imagergb[i][j].green = u_char((c[1]&224)/32 + (c[0]&3)*8);
-                imagergb[i][j].red = u_char(c[0]&124/8);
+                imagergb[i][j].blue = uint8_t(c[1]&31);
+                imagergb[i][j].green = uint8_t((c[1]&224)/32 + (c[0]&3)*8);
+                imagergb[i][j].red = uint8_t(c[0]&124/8);
                 imagergb[i][j].reserved = 255;
             }
             if (bih.biWidth%4 != 0)
@@ -319,7 +317,7 @@ int BMP::outpputininfile(string path){
         if (bih.biBitCount == 2){
             for (unsigned int i = 0; i < bih.biHeight; ++i){
                 unsigned int j = 0;
-                for (; j < bih.biWidth/4 + uint(bih.biWidth%4>0); ++j){
+                for (; j < bih.biWidth/4 + uint32_t(bih.biWidth%4>0); ++j){
                     unsigned char out = 0;
                     for (unsigned int k = 0; k < 4 && j*4 + k < bih.biWidth; ++k)
                         out += imagep[i][j*4 + k] * pow(2, 6 - k*2);
@@ -334,14 +332,13 @@ int BMP::outpputininfile(string path){
         if (bih.biBitCount == 1){
             for (unsigned int i = 0; i < bih.biHeight; ++i){
                 unsigned int j = 0;
-                for (; j < bih.biWidth/8 + uint(bih.biWidth%8>0); ++j){
+                for (; j < bih.biWidth/8 + (bih.biWidth%8>0?1:0); ++j){
                     unsigned char out = 0;
                     for (unsigned int k = 0; k < 8 && j*8 + k < bih.biWidth; ++k)
                         out += imagep[i][j*8 + k] * pow(2, 7 - k);
                     fwrite(&out, 1, 1, bmpfile);
                 }
                 unsigned char d [3] = {0, 0, 0};
-                --j;
                 if (j%4 > 0)
                     fwrite(&d, 1, 4 - (j - 1)%4 - 1, bmpfile);
             }
@@ -441,11 +438,12 @@ int BMP::writeimage(unsigned char **image, unsigned int height, unsigned int wid
         imagep = nullptr;
     }
 
-    bfh.bfSize = char32_t(54 + pallen*4 + (uint(width*(double(bitpercolor)/8)) + 4 - (uint(width*(double(bitpercolor)/8)) - 1)%4 - 1)*height);
+    bfh.bfSize = char32_t(54 + pallen*4 + (uint32_t(width*(double(bitpercolor)/8)) + 4 - (uint32_t(width*(double(bitpercolor)/8)) - 1)%4 - 1)*height);
     bih.biWidth = char32_t(width);
     bih.biHeight = char32_t(height);
     bih.biBitCount = char16_t(bitpercolor);
     bih.biClrUsed = pallen;
+    bfh.bfOffBits = 54 + pallen * 4;
 
     imagep = new unsigned char*[height];
     for (unsigned int i = 0; i < height; ++i)
@@ -466,11 +464,11 @@ int BMP::upsampling(unsigned int m){
     if (imagep != nullptr && imagergb != nullptr)
         return 1;
 
-    if (uint(bih.biWidth) > numeric_limits<char32_t>::max()/m || bih.biHeight > numeric_limits<char32_t>::max()/m)
+    if (uint32_t(bih.biWidth) > numeric_limits<char32_t>::max()/m || bih.biHeight > numeric_limits<char32_t>::max()/m)
         return 2;
 
-    unsigned int height = uint(bih.biHeight)*m;
-    unsigned int width = uint(bih.biWidth)*m;
+    unsigned int height = uint32_t(bih.biHeight)*m;
+    unsigned int width = uint32_t(bih.biWidth)*m;
 
     if (imagep != nullptr){
         //new image initialisation
@@ -584,7 +582,7 @@ int BMP::resize(unsigned int m, unsigned int n){
         return 404;
     if (imagep != nullptr && imagergb != nullptr)
         return 1;
-    if (uint(bih.biWidth) > numeric_limits<char32_t>::max()/m*n || bih.biHeight > numeric_limits<char32_t>::max()/m*n)
+    if (uint32_t(bih.biWidth) > numeric_limits<char32_t>::max()/m*n || bih.biHeight > numeric_limits<char32_t>::max()/m*n)
         return 2;
 
     unsigned int a = m, b = n, lcm;
@@ -700,9 +698,9 @@ int BMP::monochrome(){
     palette = new RGB[256];
 
     for (int i = 0; i < 256; ++i){
-        palette[i].red = u_char(i);
-        palette[i].green = u_char(i);
-        palette[i].blue = u_char(i);
+        palette[i].red = uint8_t(i);
+        palette[i].green = uint8_t(i);
+        palette[i].blue = uint8_t(i);
         palette[i].reserved = 0;
     }
 
@@ -734,12 +732,12 @@ BMP& BMP::logicalfiltration() // return xor of files
         for (unsigned int j = 0; j < bih.biWidth; ++j)
             newim[i][j] = 0;
     }
-    for (long int i  = 1; i < bih.biHeight - 1; ++i)
-        for (long int j = 1; j < bih.biWidth - 1; ++i){
+    for (long long i  = 1; i < bih.biHeight - 1; ++i)
+        for (long long j = 1; j < bih.biWidth - 1; ++j){
             int c = 0;
             for (int k = -1; k < 2; ++k)
                 for (int l = -1; l < 2; ++l)
-                    if (k != 0 && l != 0)
+                    if (k != 0 || l != 0)
                         c += imagep[i+k][j+l];
 
             if (c == 8)
@@ -754,11 +752,11 @@ BMP& BMP::logicalfiltration() // return xor of files
         }
     for (unsigned int i = 0;  i < bih.biHeight; ++i){
         newim[i][0] = imagep[i][0];
-        newim[i][bih.biHeight - 1] = imagep[i][bih.biHeight - 1];
+        newim[i][bih.biWidth - 1] = imagep[i][bih.biWidth - 1];
     }
     for (unsigned int j = 1; j < bih.biWidth - 1; ++j){
         newim[0][j] = imagep[0][j];
-        newim[bih.biWidth - 1][j] = imagep[bih.biWidth - 1][j];
+        newim[bih.biHeight - 1][j] = imagep[bih.biHeight - 1][j];
     }
     BMP* xorimage = new BMP();
 
