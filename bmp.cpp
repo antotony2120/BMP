@@ -439,7 +439,7 @@ int BMP::writeimage(unsigned char **image, unsigned int height, unsigned int wid
     bih.biHeight = char32_t(height);
     bih.biBitCount = char16_t(bitpercolor);
     bih.biClrUsed = pallen<256?pallen:0;
-    bfh.bfOffBits = 54 + pallen * 4;
+    bfh.bfOffBits = 14 + bih.biSize + pallen * 4;
 
     imagep = new unsigned char*[height];
     for (unsigned int i = 0; i < height; ++i)
@@ -891,12 +891,22 @@ int BMP::borderssobel(){
             newimage[0][j] = 0;
             newimage[bih.biHeight - 1][j] = 0;
         }
+        unsigned short int ** gray = new unsigned short int*[bih.biHeight];
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            gray[i] = new unsigned short int[bih.biWidth];
+        unsigned short int maximum = 0;
         for (long long i = 1; i < bih.biHeight - 1; ++i)
             for (long long j = 1; j < bih.biWidth - 1; ++j){
-                newimage[i][j] = uint8_t(int(sqrt((-imagep[i - 1][j - 1] - 2*imagep[i - 1][j] - imagep[i - 1][j + 1] + imagep[i + 1][j - 1] + 2*imagep[i + 1][j] + imagep[i + 1][j + 1])*
+                gray[i][j] = uint8_t(int(sqrt((-imagep[i - 1][j - 1] - 2*imagep[i - 1][j] - imagep[i - 1][j + 1] + imagep[i + 1][j - 1] + 2*imagep[i + 1][j] + imagep[i + 1][j + 1])*
                         (-imagep[i - 1][j - 1] - 2*imagep[i - 1][j] - imagep[i - 1][j + 1] + imagep[i + 1][j - 1] + 2*imagep[i + 1][j] + imagep[i + 1][j + 1]) +
                         (-imagep[i - 1][j - 1] - 2*imagep[i][j - 1] - imagep[i + 1][j - 1] + imagep[i - 1][j + 1] + 2*imagep[i][j + 1] + imagep[i + 1][j + 1])*
-                        (-imagep[i - 1][j - 1] - 2*imagep[i][j - 1] - imagep[i + 1][j - 1] + imagep[i - 1][j + 1] + 2*imagep[i][j + 1] + imagep[i + 1][j + 1]))/sqrt(2)/(bih.biClrUsed?bih.biClrUsed:pow(2, bih.biBitCount))/4*255));
+                        (-imagep[i - 1][j - 1] - 2*imagep[i][j - 1] - imagep[i + 1][j - 1] + imagep[i - 1][j + 1] + 2*imagep[i][j + 1] + imagep[i + 1][j + 1]))/sqrt(2)));
+                if (gray[i][j] > maximum)
+                    maximum = gray[i][j];
+            }
+        for (long long i = 1; i < bih.biHeight - 1; ++i)
+            for (long long j = 1; j < bih.biWidth - 1; ++j){
+                newimage[i][j] = uint8_t(int(double(gray[i][j])/maximum * 255));
             }
         RGB * palet = new RGB[256];
         for (int i = 0; i < 256; ++i){
