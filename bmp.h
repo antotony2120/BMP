@@ -118,6 +118,7 @@ public:
     int resize(unsigned int m, unsigned int n);
 
     int monochrome();
+    int binarisation();
     BMP& logicalfiltration();
     int borderssobel();
 };

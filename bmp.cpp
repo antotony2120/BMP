@@ -34,6 +34,19 @@ BMP::~BMP(){
 
 
 int BMP::__inputfromfile(string path){
+    if (imagep != nullptr){
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            delete [] imagep[i];
+        delete [] imagep;
+        imagep = nullptr;
+    }
+    if (imagergb != nullptr){
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            delete [] imagergb[i];
+        delete [] imagergb;
+        imagergb = nullptr;
+    }
+
     FILE * bmpfile = fopen(path.c_str(), "rb");
     if (!bmpfile)
         return 1; //not existed file
@@ -692,6 +705,36 @@ int BMP::monochrome(){
     delete [] imagergb;
     imagergb = nullptr;
 
+    return 0;
+}
+
+
+int BMP::binarisation(){
+    if (empty)
+        return 404;
+    if (imagep != nullptr && imagergb != nullptr)
+        return 1;
+
+    if (bih.biBitCount > 8){
+        monochrome();
+    }
+    unsigned char **newimage = new unsigned char*[bih.biHeight];
+    for (unsigned int i = 0; i < bih.biHeight; ++i)
+        newimage[i] = new unsigned char[bih.biHeight];
+    for (unsigned int i = 0; i < bih.biHeight; ++i)
+        for (unsigned int j = 0; j < bih.biWidth; ++j){
+            newimage[i][j] = (imagep[i][j] > 127? 1: 0);
+        }
+    RGB *palet = new RGB[2];
+    palet[0].blue = 0;
+    palet[0].red = 0;
+    palet[0].green = 0;
+    palet[0].reserved = 255;
+    palet[1].blue = 255;
+    palet[1].red = 255;
+    palet[1].green = 255;
+    palet[1].reserved = 255;
+    writeimage(newimage, bih.biHeight, bih.biWidth, palet, 2, 1);
     return 0;
 }
 
