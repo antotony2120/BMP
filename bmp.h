@@ -119,6 +119,7 @@ public:
 
     int monochrome();
     BMP& logicalfiltration();
+    int borderssobel();
 };
 
 #endif // BMP_H

@@ -34,7 +34,7 @@ BMP::~BMP(){
 
 
 int BMP::__inputfromfile(string path){
-    FILE * bmpfile = fopen(path.c_str(), "r");
+    FILE * bmpfile = fopen(path.c_str(), "rb");
     if (!bmpfile)
         return 1; //not existed file
 
@@ -65,28 +65,9 @@ int BMP::__inputfromfile(string path){
         delete [] data;
     }
 
-//    if (fread( data, 1, 4, bmpfile) != 4)
-//        return 3;//error while reading info header length
-
-//    char32_t n = lechar32(data);
-
-//    delete [] data;
-
     if (bih.biCompression != 0){
         return 10;//compression!!!
     }
-
-
-//    data = new unsigned char[n];
-
-//    if (fread(&data[4], 1, n - 4, bmpfile) != n - 4)
-//        return 3;//error while reading info header
-
-//    bih = {40, lechar32(&data[4]), lechar32(&data[8]), lechar16(&data[12]), lechar16(&data[14]), lechar32(&data[16]), lechar32(&data[20]), lechar32(&data[24]), lechar32(&data[28]), lechar32(&data[32]), lechar32(&data[36])};
-
-//    bfh.bfSize -= n - 40;
-
-
 
     if (bih.biBitCount <= 8){
         int count = (bih.biClrUsed?int(bih.biClrUsed):int(pow(2, bih.biBitCount)));
@@ -190,8 +171,10 @@ int BMP::__inputfromfile(string path){
         unsigned char c[3];
         for (int i = 0; i < int(bih.biHeight); ++i){
             for (int j = 0; j < int(bih.biWidth); ++j){
-                if (fread(&c, 1, 3, bmpfile) != 3)
-                        return 6;//error while reading image
+                if (fread(&c, 1, 3, bmpfile) != 3){
+                    fclose(bmpfile);
+                    return 6;//error while reading image
+                }
                 imagergb[i][j].blue = c[0];
                 imagergb[i][j].green = c[1];
                 imagergb[i][j].red = c[2];
@@ -254,7 +237,7 @@ int BMP::inputfromfile(string path, ostream & out){
 }
 
 int BMP::outpputininfile(string path){
-    FILE * bmpfile = fopen(path.c_str(), "w");
+    FILE * bmpfile = fopen(path.c_str(), "wb");
 
     //output of file header
     fwrite(&bfh.bft1, 1, 1, bmpfile);
@@ -442,7 +425,7 @@ int BMP::writeimage(unsigned char **image, unsigned int height, unsigned int wid
     bih.biWidth = char32_t(width);
     bih.biHeight = char32_t(height);
     bih.biBitCount = char16_t(bitpercolor);
-    bih.biClrUsed = pallen;
+    bih.biClrUsed = pallen<256?pallen:0;
     bfh.bfOffBits = 54 + pallen * 4;
 
     imagep = new unsigned char*[height];
@@ -726,11 +709,11 @@ BMP& BMP::logicalfiltration() // return xor of files
     if (imagep == nullptr)
         throw 3;
 
-    unsigned char **newim = new unsigned char*[bih.biHeight];
+    unsigned char **newimage = new unsigned char*[bih.biHeight];
     for (unsigned int i = 0; i < bih.biHeight; ++i){
-        newim[i] = new unsigned char[bih.biWidth];
+        newimage[i] = new unsigned char[bih.biWidth];
         for (unsigned int j = 0; j < bih.biWidth; ++j)
-            newim[i][j] = 0;
+            newimage[i][j] = 0;
     }
     for (long long i  = 1; i < bih.biHeight - 1; ++i)
         for (long long j = 1; j < bih.biWidth - 1; ++j){
@@ -741,22 +724,22 @@ BMP& BMP::logicalfiltration() // return xor of files
                         c += imagep[i+k][j+l];
 
             if (c == 8)
-                newim[i][j] = 1;
+                newimage[i][j] = 1;
             else
             {
                 if (c == 0)
-                    newim[i][j] = 0;
+                    newimage[i][j] = 0;
                 else
-                    newim[i][j] = imagep[i][j];
+                    newimage[i][j] = imagep[i][j];
             }
         }
     for (unsigned int i = 0;  i < bih.biHeight; ++i){
-        newim[i][0] = imagep[i][0];
-        newim[i][bih.biWidth - 1] = imagep[i][bih.biWidth - 1];
+        newimage[i][0] = imagep[i][0];
+        newimage[i][bih.biWidth - 1] = imagep[i][bih.biWidth - 1];
     }
     for (unsigned int j = 1; j < bih.biWidth - 1; ++j){
-        newim[0][j] = imagep[0][j];
-        newim[bih.biHeight - 1][j] = imagep[bih.biHeight - 1][j];
+        newimage[0][j] = imagep[0][j];
+        newimage[bih.biHeight - 1][j] = imagep[bih.biHeight - 1][j];
     }
     BMP* xorimage = new BMP();
 
@@ -766,11 +749,120 @@ BMP& BMP::logicalfiltration() // return xor of files
 
     for (unsigned int i = 0; i < bih.biHeight; ++i)
         for (unsigned int j = 0; j < bih.biWidth; ++j)
-            xorarray[i][j] = (imagep[i][j] + newim[i][j])%2;
+            xorarray[i][j] = (imagep[i][j] + newimage[i][j])%2;
 
     xorimage->writeimage(xorarray, bih.biHeight, bih.biWidth, this->palette, 2, 1);
 
-    writeimage(newim, bih.biHeight, bih.biWidth, this->palette, 2, 1);
+    for (unsigned int i = 0; i < bih.biHeight; ++i)
+        delete [] imagep[i];
+    delete [] imagep;
+    imagep = newimage;
 
     return *xorimage;
+}
+
+int BMP::borderssobel(){
+    if (empty)
+        throw 404;
+
+    if (imagergb != nullptr && imagep != nullptr)
+        throw 1;
+
+
+    if (bih.biBitCount > 8){
+        RGB ** newimage = new RGB*[bih.biHeight];
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            newimage[i] = new RGB[bih.biWidth];
+        unsigned short int ** blue = new unsigned short int*[bih.biHeight];
+        unsigned short int ** red = new unsigned short int*[bih.biHeight];
+        unsigned short int ** green = new unsigned short int*[bih.biHeight];
+        for (unsigned int i = 0; i < bih.biHeight; ++i){
+            blue[i] = new unsigned short int[bih.biWidth];
+            red[i] = new unsigned short int[bih.biWidth];
+            green[i] = new unsigned short int[bih.biWidth];
+        }
+        for (unsigned int i = 0; i < bih.biHeight; ++i){
+            newimage[i][bih.biWidth - 1].blue = 0;
+            newimage[i][bih.biWidth - 1].red = 0;
+            newimage[i][bih.biWidth - 1].green = 0;
+            newimage[i][bih.biWidth - 1].reserved = 255;
+            newimage[i][0].blue = 0;
+            newimage[i][0].red = 0;
+            newimage[i][0].green = 0;
+            newimage[i][0].reserved = 255;
+        }
+        for (unsigned int i = 1; i < bih.biWidth - 1; ++i){
+            newimage[bih.biHeight - 1][i].blue = 0;
+            newimage[bih.biHeight - 1][i].red = 0;
+            newimage[bih.biHeight - 1][i].green = 0;
+            newimage[bih.biHeight - 1][i].reserved = 255;
+            newimage[0][i].blue = 0;
+            newimage[0][i].red = 0;
+            newimage[0][i].green = 0;
+            newimage[0][i].reserved = 255;
+        }
+        unsigned short int maximum = 0;
+        for (long long i = 1; i < bih.biHeight - 1; ++i)
+            for (long long j = 1; j < bih.biWidth - 1; ++j){
+                blue[i][j] = uint16_t(int(sqrt((-imagergb[i - 1][j - 1].blue - 2*imagergb[i - 1][j].blue - imagergb[i - 1][j + 1].blue + imagergb[i + 1][j - 1].blue + 2*imagergb[i + 1][j].blue + imagergb[i + 1][j + 1].blue)*
+                        (-imagergb[i - 1][j - 1].blue - 2*imagergb[i - 1][j].blue - imagergb[i - 1][j + 1].blue + imagergb[i + 1][j - 1].blue + 2*imagergb[i + 1][j].blue + imagergb[i + 1][j + 1].blue) +
+                        (-imagergb[i - 1][j - 1].blue - 2*imagergb[i][j - 1].blue - imagergb[i + 1][j - 1].blue + imagergb[i - 1][j + 1].blue + 2*imagergb[i][j + 1].blue + imagergb[i + 1][j + 1].blue)*
+                        (-imagergb[i - 1][j - 1].blue - 2*imagergb[i][j - 1].blue - imagergb[i + 1][j - 1].blue + imagergb[i - 1][j + 1].blue + 2*imagergb[i][j + 1].blue + imagergb[i + 1][j + 1].blue))));
+                red[i][j] = uint16_t(int(sqrt((-imagergb[i - 1][j - 1].red - 2*imagergb[i - 1][j].red - imagergb[i - 1][j + 1].red + imagergb[i + 1][j - 1].red + 2*imagergb[i + 1][j].red + imagergb[i + 1][j + 1].red)*
+                        (-imagergb[i - 1][j - 1].red - 2*imagergb[i - 1][j].red - imagergb[i - 1][j + 1].red + imagergb[i + 1][j - 1].red + 2*imagergb[i + 1][j].red + imagergb[i + 1][j + 1].red) +
+                        (-imagergb[i - 1][j - 1].red - 2*imagergb[i][j - 1].red - imagergb[i + 1][j - 1].red + imagergb[i - 1][j + 1].red + 2*imagergb[i][j + 1].red + imagergb[i + 1][j + 1].red)*
+                        (-imagergb[i - 1][j - 1].red - 2*imagergb[i][j - 1].red - imagergb[i + 1][j - 1].red + imagergb[i - 1][j + 1].red + 2*imagergb[i][j + 1].red + imagergb[i + 1][j + 1].red))));
+                green[i][j] = uint16_t(int(sqrt((-imagergb[i - 1][j - 1].green - 2*imagergb[i - 1][j].green - imagergb[i - 1][j + 1].green + imagergb[i + 1][j - 1].green + 2*imagergb[i + 1][j].green + imagergb[i + 1][j + 1].green)*
+                        (-imagergb[i - 1][j - 1].green - 2*imagergb[i - 1][j].green - imagergb[i - 1][j + 1].green + imagergb[i + 1][j - 1].green + 2*imagergb[i + 1][j].green + imagergb[i + 1][j + 1].green) +
+                        (-imagergb[i - 1][j - 1].green - 2*imagergb[i][j - 1].green - imagergb[i + 1][j - 1].green + imagergb[i - 1][j + 1].green + 2*imagergb[i][j + 1].green + imagergb[i + 1][j + 1].green)*
+                        (-imagergb[i - 1][j - 1].green - 2*imagergb[i][j - 1].green - imagergb[i + 1][j - 1].green + imagergb[i - 1][j + 1].green + 2*imagergb[i][j + 1].green + imagergb[i + 1][j + 1].green))));
+                newimage[i][j].reserved = 255;
+                if (blue[i][j] > maximum)
+                    maximum = blue[i][j];
+                if (red[i][j] > maximum)
+                    maximum = red[i][j];
+                if (green[i][j] > maximum)
+                    maximum = green[i][j];
+            }
+        for (long long i = 1; i < bih.biHeight - 1; ++i)
+            for (long long j = 1; j < bih.biWidth - 1; ++j){
+                newimage[i][j].blue = uint8_t(int(double(blue[i][j])/maximum*255));
+                newimage[i][j].red = uint8_t(int(double(red[i][j])/maximum*255));
+                newimage[i][j].green = uint8_t(int(double(green[i][j])/maximum*255));
+            }
+
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            delete [] imagergb[i];
+        delete [] imagergb;
+        imagergb = newimage;
+    }
+    else{
+        unsigned char ** newimage = new unsigned char *[bih.biHeight];
+        for (unsigned int i = 0; i < bih.biHeight; ++i)
+            newimage[i] = new unsigned char[bih.biWidth];
+        for (unsigned int i = 0;  i < bih.biHeight; ++i){
+            newimage[i][0] = 0;
+            newimage[i][bih.biWidth - 1] = 0;
+        }
+        for (unsigned int j = 1; j < bih.biWidth - 1; ++j){
+            newimage[0][j] = 0;
+            newimage[bih.biHeight - 1][j] = 0;
+        }
+        for (long long i = 1; i < bih.biHeight - 1; ++i)
+            for (long long j = 1; j < bih.biWidth - 1; ++j){
+                newimage[i][j] = uint8_t(int(sqrt((-imagep[i - 1][j - 1] - 2*imagep[i - 1][j] - imagep[i - 1][j + 1] + imagep[i + 1][j - 1] + 2*imagep[i + 1][j] + imagep[i + 1][j + 1])*
+                        (-imagep[i - 1][j - 1] - 2*imagep[i - 1][j] - imagep[i - 1][j + 1] + imagep[i + 1][j - 1] + 2*imagep[i + 1][j] + imagep[i + 1][j + 1]) +
+                        (-imagep[i - 1][j - 1] - 2*imagep[i][j - 1] - imagep[i + 1][j - 1] + imagep[i - 1][j + 1] + 2*imagep[i][j + 1] + imagep[i + 1][j + 1])*
+                        (-imagep[i - 1][j - 1] - 2*imagep[i][j - 1] - imagep[i + 1][j - 1] + imagep[i - 1][j + 1] + 2*imagep[i][j + 1] + imagep[i + 1][j + 1]))/sqrt(2)/(bih.biClrUsed?bih.biClrUsed:pow(2, bih.biBitCount))/4*255));
+            }
+        RGB * palet = new RGB[256];
+        for (int i = 0; i < 256; ++i){
+            palet[i].blue = uint8_t(i);
+            palet[i].red = uint8_t(i);
+            palet[i].green = uint8_t(i);
+            palet[i].reserved = 255;
+        }
+        writeimage(newimage, bih.biHeight, bih.biWidth, palet, 256, 8);
+    }
+    return 0;
 }
