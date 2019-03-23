@@ -919,3 +919,40 @@ int BMP::borderssobel(){
     }
     return 0;
 }
+
+string BMP::analysisthirdtask(){
+    if (empty)
+        throw 404;
+    if (bih.biBitCount != 1)
+        throw 1;
+    if (imagep == nullptr)
+        throw 2;
+
+    int black = 0;
+    string result = "";
+    for (unsigned int i = 0; i < bih.biHeight; ++i)
+        for (unsigned int j = 0; j < bih.biWidth; ++j)
+            black += imagep[i][j];
+
+    result += to_string(black) + ";";
+    result += to_string(double(black)/(bih.biWidth*bih.biHeight)) + ";";
+    double x = 0;
+    double y = 0;
+    for (unsigned int i = 0; i < bih.biHeight; ++i)
+        for (unsigned int j = 0; j < bih.biWidth; ++j){
+            y += double(i)*imagep[i][j]/black;
+            x += double(j)*imagep[i][j]/black;
+        }
+    result += to_string(int(x)) + " " + to_string(int(y)) + ";";
+    result += to_string((x - 1)/(bih.biWidth - 1)) + " " + to_string((y - 1)/(bih.biHeight - 1)) + ";";
+    double ix = 0;
+    double iy = 0;
+    for (unsigned int i = 0; i < bih.biHeight; ++i)
+        for (unsigned int j = 0; j < bih.biWidth; ++j){
+            ix += (double(j) - x)*(double(j) - x)*imagep[i][j];
+            iy += (double(i) - y)*(double(i) - y)*imagep[i][j];
+        }
+    result += to_string(int(ix)) + ";" + to_string(int(iy)) + ";";
+    result += to_string(ix/(bih.biHeight*bih.biHeight + bih.biWidth*bih.biWidth)) + " " + to_string(iy/(bih.biHeight*bih.biHeight + bih.biWidth*bih.biWidth)) + ";\n";
+    return result;
+}

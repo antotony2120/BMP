@@ -121,6 +121,7 @@ public:
     int binarisation();
     BMP& logicalfiltration();
     int borderssobel();
+    string analysisthirdtask();
 };
 
 #endif // BMP_H

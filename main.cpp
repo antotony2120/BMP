@@ -4,16 +4,21 @@
 
 using namespace std;
 
-int main(){
+int analysisalphabet(){
     BMP img;
-    img.inputfromfile("clip.bmp");
+    ofstream out;
+    out.open("C://Users//Anton//Code//C++//BMP//BMP//analysis.csv");
+    out << "N;weight;weightrel;x y;x y rel;ix;iy;ix iy rel;\n";
+    for (int i = 1; i < 34; ++i){
+        img.inputfromfile("C://Users//Anton//Code//C++//BMP//BMP//Alphabet//" + to_string(i) + ".bmp");
+        out << to_string(i) + ";";
+        out << img.analysisthirdtask();
+    }
+    out.close();
+    return 0;
+}
 
-//    unsigned int n = 4;
-//    img.downsampling(n);5
-    //img.resize(3,4);
-    //img.monochrome();
-    //img.resizewithupanddown(8,3);
-    img.downsampling(2);
-    img.outpputininfile("clip.bmp");
+int main(){
+    analysisalphabet();
     return 0;
 }
